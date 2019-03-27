@@ -19,6 +19,9 @@ namespace 初探{
             int match_count = 0;  //紀錄符合的樣本數量
             float pre_difference = 0;   //前次誤差率
 
+            //暫存是否新產生的參數是可以使用的
+            bool Module_OK = true;
+
             //輸入參數 10樣本
             int[] input = new int[10];
 
@@ -30,7 +33,15 @@ namespace 初探{
             for (int i = 0; i < input.Length; i++)
                 answer += input[i] * origin[i];
 
+            //寫新檔案
+            StreamWriter sw_input = new StreamWriter(path + @"\input\" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".txt");
+            for (int i = 0; i < input.Length; i++) sw_input.WriteLine(input[i]);
+            sw_input.Close();
+            sw_input.Dispose();
 
+            //紀錄
+            DateTime Start = DateTime.Now;
+            
             while (true){
 
                 //讀取學習模型參數
@@ -67,6 +78,7 @@ namespace 初探{
                                 } while (inner_origin[i, k] < 0 || inner_origin[i, k] > 1);
                                 learn_origin[i] += input[k] * inner_origin[i, k];
                             }
+                            if (learn_origin[i] > 1 || learn_origin[i] < 0) i--;
                             sr_inner.Close();
                             sr_inner.Dispose();
                         }
@@ -78,6 +90,30 @@ namespace 初探{
                         float difference = (answer > learn_answer) ? learn_answer / answer : answer / learn_answer;
 
                         if (pre_difference < difference){
+                            //先重置Module訊號
+                            Module_OK = true;
+                            //檢查先前所有模型資料是否符合本次修改結果
+                            //查詢目錄
+                            string[] dirs = Directory.GetFiles(path + @"input\");
+                            for(int i = 0; i < dirs.Length; i++){
+                                float path_answer = 0;
+                                float[] path_input = new float[10];
+                                StreamReader sr_path = new StreamReader(dirs[i]);
+                                for (int k = 0; k < 10; k++) path_input[k] = float.Parse(sr_path.ReadLine());
+                                sr_path.Close();
+                                sr_path.Dispose();
+                                for (int k = 0; k < path_input.Length; k++)
+                                    path_answer += path_input[k] * learn_origin[k];
+                                float path_difference = (answer > path_answer) ? path_answer / answer : answer / path_answer;
+                                //如果反而造成準確度下降則不採用新的參數
+                                if (pre_difference > path_difference){
+                                    Module_OK = false;
+                                    break;
+                                }
+                            }
+
+                            if (Module_OK == false) break;
+
                             //改寫隱藏層檔
                             for (int i = 0; i < learn_origin.Length; i++){
                                 StreamWriter sw_inner = new StreamWriter(string.Format("{0}var{1}.txt",path, (i + 1).ToString("00")));
@@ -98,11 +134,20 @@ namespace 初探{
                     }
                 }
 
-                Console.WriteLine(string.Format("第\t{0}\t次模型誤差值：{1} %", max, pre_difference * 100));
-                if (pre_difference >= 0.99f) break;
+                //如果前次>本次 (表示準確度提升)
+                if (Module_OK == true)
+                    Console.WriteLine(string.Format("第\t{0}\t次模型準確度：{1} %", max + 1, pre_difference * 100));
+                //超過95%就當作完成
+                if (pre_difference >= 0.95f) break;
                 max++;
             }
-            
+
+            Console.WriteLine(string.Format("\n------------------------------------\n{0} 完成模型準確度95%建置\n費時：{1}\n" +
+                "即將開始下一次模型建置\n------------------------------------\n", DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss "), (DateTime.Now - Start).ToString()));
+
+            //該次判斷結束，重新再生成數字一次
+            Main(null);
+
             Console.ReadKey();
         }
     }
